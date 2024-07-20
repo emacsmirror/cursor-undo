@@ -26,15 +26,15 @@
 ;; Cursor-undo allows you to undo cursor movement commands using the Emacs
 ;; standard `undo' command.
 ;;
-;; For frequent cursor movements such as like up/down/left/right, it
-;; combines the movements of the same direction into a single undo entry.
-;; This prevents the undo command from reversing each individual
-;; character movement separately.  For example, if you move the cursor 20
-;; characters to the right and then 10 lines up, the first undo will go
-;; down 10 lines back, and the next undo move back 20 characters left.
-;; On the other hand, for search commands that often jump across multiple
-;; pages, each search command has its own undo entry, allowing you to
-;; undo them one at a time rather than as a combined operation.
+;; For frequent cursor movements such as up/down/left/right, it combines
+;; the movements of the same direction into a single undo entry.  This
+;; prevents the undo command from reversing each individual character
+;; movement separately.  For example, if you move the cursor 20 characters
+;; to the right and then 10 lines up, the first undo will go down 10 lines
+;; back, and the next undo move back 20 characters left.  On the other
+;; hand, for search commands that often jump across multiple pages, each
+;; search command has its own undo entry, allowing you to undo them one at
+;; a time rather than as a combined operation.
 ;;
 ;; This cursor-undo functionality has existed in my local Emacs init file
 ;; for over 11+ years, since version 0 on 2013-06-26.  It was originally
@@ -63,8 +63,8 @@
 ;;
 ;; Usage:
 ;;
-;;   In theory, once this package is installed you should already have
-;;   cursor-undo autoloaded and enabled.  If not, or if you download this
+;;   In theory, once this package is installed, you should already have
+;;   cursor-undo autoloaded and enabled.  If not, or if you downloaded this
 ;;   package as source, put "cursor-undo.el" file in a `load-path' and add
 ;;   the following line into your Emacs init file .emacs or init.el:
 ;;
