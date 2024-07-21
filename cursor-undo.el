@@ -63,12 +63,11 @@
 ;;
 ;; Usage:
 ;;
-;;   In theory, once this package is installed, you should already have
-;;   cursor-undo autoloaded and enabled.  If not, or if you downloaded this
-;;   package as source, put "cursor-undo.el" file in a `load-path' and add
-;;   the following line into your Emacs init file .emacs or init.el:
+;;   Once this package is installed, you only need to enable cursor-undo
+;;   mode by adding the following line into your Emacs init file .emacs or
+;;   init.el:
 ;;
-;;     (require 'cursor-undo)
+;;     (cursor-undo 1)
 ;;
 ;; Notes for EVIL mode user:
 ;;
@@ -93,27 +92,36 @@
 
 ;;; Code:
 
+;;;###autoload
+(define-minor-mode cursor-undo
+  "Global minor mode for tracking cursor undo."
+  :lighter " cu"
+  :variable cundo-enable-cursor-tracking)
+
 ;; Global enabling control flag
-(defcustom cundo-enable-cursor-tracking  t
+;;;###autoload
+(defcustom cundo-enable-cursor-tracking  nil
   "Global control flag to enable cursor undo tracking."
   :type 'boolean)
+
 ;; Local disable flag, use reverse logic as NIL is still a list and we can
 ;; pop it again and again
-(defvar cundo-disable-local-cursor-tracking nil)
-(make-variable-buffer-local 'cundo-disable-local-cursor-tracking)
+(defvar-local cundo-disable-local-cursor-tracking nil)
 
 ;; Clear duplicated `(apply cdr nil) nil' pairs in `buffer-undo-list' done by
 ;; `primitive-undo'.
-(defvar cundo-clear-usless-undoinfo t)
+(defcustom cundo-clear-usless-undoinfo t
+  "Clean up obsolete undo info in the `buffer-undo-list'."
+  :type 'boolean)
 
 (defun cundo-restore-win (start)
   (set-window-start nil start)
   (if cundo-clear-usless-undoinfo
       ;; This tries to remove as much garbage as possible but still some left
       ;; in the `buffer-undo-list'.  TODO: add a idle task to remove them
-      (while (and (null (first buffer-undo-list)) ;; nil
-                  (equal (second buffer-undo-list) '(apply cdr nil))
-                  (null (third buffer-undo-list)))
+      (while (and (null (car buffer-undo-list)) ;; nil
+                  (equal (cadr buffer-undo-list) '(apply cdr nil))
+                  (null (caddr buffer-undo-list)))
         ;; (nil (apply cdr nil) nil a b...) -> (nil a b...)
         (setq buffer-undo-list (cddr buffer-undo-list)))))
 
@@ -146,7 +154,7 @@ Parameters:
   (if (and (not screen-pos)
            no-move)
       (error
-"Error: No undo information will be stored if we're neither recording cursor
+"Error: No undo information will be stored if we're neither recording cursor \
 relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
   (let* ((func-sym-str (symbol-name func-sym))
          (advice-sym-str (concat func-sym-str "-cursor-undo"))
@@ -164,7 +172,7 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
                 ;; prevent nested calls for complicated compound commands
                 (cundo-enable-cursor-tracking nil)
                 (prev-point (point))
-                prev-screen-start)
+                (prev-screen-start))
            ,@(when screen-pos
                '((when cursor-tracking
                    (setq prev-screen-start (window-start)))))
@@ -319,81 +327,78 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;;
 ;; CUA rectangle, also used by Brief Editor mode
 ;;
-(eval-after-load 'cua-rect
-  '(progn
-     (def-cursor-undo cua-resize-rectangle-up        nil     nil      nil)
-     (def-cursor-undo cua-resize-rectangle-down      nil     nil      nil)
-     (def-cursor-undo cua-resize-rectangle-left      nil     nil      nil)
-     (def-cursor-undo cua-resize-rectangle-right     nil     nil      nil)
-     (def-cursor-undo cua-resize-rectangle-page-up   nil     nil      nil)
-     (def-cursor-undo cua-resize-rectangle-page-down nil     nil      nil)))
+(def-cursor-undo cua-resize-rectangle-up        nil     nil      nil)
+(def-cursor-undo cua-resize-rectangle-down      nil     nil      nil)
+(def-cursor-undo cua-resize-rectangle-left      nil     nil      nil)
+(def-cursor-undo cua-resize-rectangle-right     nil     nil      nil)
+(def-cursor-undo cua-resize-rectangle-page-up   nil     nil      nil)
+(def-cursor-undo cua-resize-rectangle-page-down nil     nil      nil)
 
 ;;
 ;; Brief Editor Mode cursor movements
 ;;
-(eval-after-load 'brief
-  '(progn
-     ;; If we defined brief-left-char and brief-right-char, remember to check
-     ;; (brief-rectangle-active) and call cua-resize-rectangle-left/right
-     ;; accordingly
-     ;; -----------------------------------------------------------------------
-     ;;               keyboard function       no-combine  screen-pos  no-move
-     ;; -----------------------------------------------------------------------
-     (def-cursor-undo brief-previous-line            nil     nil    nil)
-     (def-cursor-undo brief-next-line                nil     nil    nil)
-     (def-cursor-undo brief-fixed-cursor-page-up     nil     t     nil)
-     (def-cursor-undo brief-fixed-cursor-page-down   nil     t     nil)
-     (def-cursor-undo brief-home                     t       t)
-     (def-cursor-undo brief-end                      t       t)
-     (def-cursor-undo brief-forward-word             nil)
-     (def-cursor-undo brief-backward-word            nil)
-     (def-cursor-undo brief-recenter-left-right      nil     t     t)
-     (def-cursor-undo brief-move-to-window-line-0    nil     t)
-     (def-cursor-undo brief-move-to-window-line-end  nil     t)
-     (def-cursor-undo brief-previous-physical-line   nil     nil)
-     (def-cursor-undo brief-next-physical-line       nil     nil)
-     (def-cursor-undo brief-beginning-of-file        nil     t)
-     (def-cursor-undo brief-end-of-file              nil     t)
-     (def-cursor-undo brief-mark-move-to-window-line-0 nil   t)
-     (def-cursor-undo brief-mark-move-to-window-line-end nil t)
-     ;; Search
-     (def-cursor-undo brief-search-forward           t       t)
-     (def-cursor-undo brief-search-forward-currword  t       t)
-     (def-cursor-undo brief-search-backward          t       t)
-     (def-cursor-undo brief-search-backward-currword t       t)
-     (def-cursor-undo brief-repeat-search            t       t)
-     (def-cursor-undo brief-repeat-search-backward   t       t)
-     ;; Bookmark related
-     (def-cursor-undo brief-bookmark-do-jump         t       t)
-     (def-cursor-undo brief-bookmark-jump-set-0      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-1      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-2      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-3      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-4      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-5      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-6      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-7      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-8      t       t)
-     (def-cursor-undo brief-bookmark-jump-set-9      t       t)
-     (def-cursor-undo brief-shift-tab                t       t)
+;; For feature 'brief
+;; If we defined brief-left-char and brief-right-char, remember to check
+;; (brief-rectangle-active) and call cua-resize-rectangle-left/right
+;; accordingly
+;; -----------------------------------------------------------------------
+;;               keyboard function       no-combine  screen-pos  no-move
+;; -----------------------------------------------------------------------
+(def-cursor-undo brief-previous-line            nil     nil    nil)
+(def-cursor-undo brief-next-line                nil     nil    nil)
+(def-cursor-undo brief-fixed-cursor-page-up     nil     t     nil)
+(def-cursor-undo brief-fixed-cursor-page-down   nil     t     nil)
+(def-cursor-undo brief-home                     t       t)
+(def-cursor-undo brief-end                      t       t)
+(def-cursor-undo brief-forward-word             nil)
+(def-cursor-undo brief-backward-word            nil)
+(def-cursor-undo brief-recenter-left-right      nil     t     t)
+(def-cursor-undo brief-move-to-window-line-0    nil     t)
+(def-cursor-undo brief-move-to-window-line-end  nil     t)
+(def-cursor-undo brief-previous-physical-line   nil     nil)
+(def-cursor-undo brief-next-physical-line       nil     nil)
+(def-cursor-undo brief-beginning-of-file        nil     t)
+(def-cursor-undo brief-end-of-file              nil     t)
+(def-cursor-undo brief-mark-move-to-window-line-0 nil   t)
+(def-cursor-undo brief-mark-move-to-window-line-end nil t)
+;; Search
+(def-cursor-undo brief-search-forward           t       t)
+(def-cursor-undo brief-search-forward-currword  t       t)
+(def-cursor-undo brief-search-backward          t       t)
+(def-cursor-undo brief-search-backward-currword t       t)
+(def-cursor-undo brief-repeat-search            t       t)
+(def-cursor-undo brief-repeat-search-backward   t       t)
+;; Bookmark related
+(def-cursor-undo brief-bookmark-do-jump         t       t)
+(def-cursor-undo brief-bookmark-jump-set-0      t       t)
+(def-cursor-undo brief-bookmark-jump-set-1      t       t)
+(def-cursor-undo brief-bookmark-jump-set-2      t       t)
+(def-cursor-undo brief-bookmark-jump-set-3      t       t)
+(def-cursor-undo brief-bookmark-jump-set-4      t       t)
+(def-cursor-undo brief-bookmark-jump-set-5      t       t)
+(def-cursor-undo brief-bookmark-jump-set-6      t       t)
+(def-cursor-undo brief-bookmark-jump-set-7      t       t)
+(def-cursor-undo brief-bookmark-jump-set-8      t       t)
+(def-cursor-undo brief-bookmark-jump-set-9      t       t)
+(def-cursor-undo brief-shift-tab                t       t)
 
-     (define-advice brief-buffer-read-only-toggle
-         (:around (orig-func &rest args)
-                  read-only-toggle-not-go-into-last-command)
-       ;; Let it not go into `last-command' so that it won't break our
-       ;; continuous undo operations.  If our desire operation (using the above
-       ;; read-only+undo trick) is
-       ;;   "<toggle R/O> - <undo>s till stop - <toggle R/O> - keep undoing",
-       ;; it will become
-       ;;   "<toggle R/O> - <undo>s till stop - <toggle R/O> - REDOs !!!".
-       ;; We don't want it start redoing! That's mainly because <undo> detected
-       ;; the previous command is not an <undo> but a <toggle read-only>. By
-       ;; setting last-command back (technically, set `this-command' back since
-       ;; the caller will put this-command to last-command), we allow undos to
-       ;; keep going.
-       (let ((lastcmd last-command))
-         (apply orig-func args)
-         (setf this-command lastcmd)))))
+(define-advice brief-buffer-read-only-toggle
+    (:around (orig-func &rest args)
+             read-only-toggle-not-go-into-last-command)
+  ;; Let it not go into `last-command' so that it won't break our
+  ;; continuous undo operations.  If our desire operation (using the above
+  ;; read-only+undo trick) is
+  ;;   "<toggle R/O> - <undo>s till stop - <toggle R/O> - keep undoing",
+  ;; it will become
+  ;;   "<toggle R/O> - <undo>s till stop - <toggle R/O> - REDOs !!!".
+  ;; We don't want it start redoing! That's mainly because <undo> detected
+  ;; the previous command is not an <undo> but a <toggle read-only>. By
+  ;; setting last-command back (technically, set `this-command' back since
+  ;; the caller will put this-command to last-command), we allow undos to
+  ;; keep going.
+  (let ((lastcmd last-command))
+    (apply orig-func args)
+    (setf this-command lastcmd)))
 
 ;; Bookmark related
 (eval-after-load 'bookmark+-1 ;; emacswiki bookmark extension
@@ -405,7 +410,7 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;;
 ;; Prevent cursor tracking during semantic parsing
 ;;
-(eval-after-load 'semantic
+(eval-after-load
   '(progn
      (add-hook 'semantic-before-idle-scheduler-reparse-hooks
                #'(lambda ()
@@ -418,15 +423,14 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
      (disable-cursor-tracking senator-force-refresh)
      (disable-cursor-tracking semantic-go-to-tag)))
 
-(eval-after-load 'smie
-  '(progn
-     ;; Need to disable the following, a sample test without disabling this is
-     ;; to open a shell-script and place cursor on 'if' or 'else' or 'fi', and
-     ;; try to move the cursor up/down. It will stuck at 'if','else', or 'fi'.
-     (disable-cursor-tracking smie-backward-sexp)
-     (disable-cursor-tracking smie-forward-sexp)
-     (disable-cursor-tracking smie-backward-sexp-command)
-     (disable-cursor-tracking smie-forward-sexp-command)))
+;; For feature 'smie
+;; Need to disable the following, a sample test without disabling this is
+;; to open a shell-script and place cursor on 'if' or 'else' or 'fi', and
+;; try to move the cursor up/down. It will stuck at 'if','else', or 'fi'.
+(disable-cursor-tracking smie-backward-sexp)
+(disable-cursor-tracking smie-forward-sexp)
+(disable-cursor-tracking smie-backward-sexp-command)
+(disable-cursor-tracking smie-forward-sexp-command)
 
 ;;
 ;; Disable cursor tracking during ediff comparing [2013-06-28 15:16:06 +0800]
@@ -456,155 +460,157 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;; This is for GUD functions which will call `recenter' from time to time (not
 ;; just my `gud-wrapper:display-line-recenter' function that calls `recenter',
 ;; some GUD functions seems to do so too).
-(eval-after-load 'gud
-  '(progn
-     (disable-cursor-tracking gud-filter)))
+;; For feature 'gud
+(disable-cursor-tracking gud-filter)
 
 ;;
 ;; EVIL mode cursor movements support
 ;;
-(eval-after-load 'evil-commands
-  '(progn
-     (def-cursor-undo evil-previous-line                     nil     nil    nil)
-     (def-cursor-undo evil-next-line                         nil     nil    nil)
-     (def-cursor-undo evil-previous-visual-line              nil     nil    nil)
-     (def-cursor-undo evil-next-visual-line                  nil     nil    nil)
-     (def-cursor-undo evil-forward-char                      nil     nil    nil)
-     (def-cursor-undo evil-backward-char                     nil     nil    nil)
-     (def-cursor-undo evil-beginning-of-line                 t       t)
-     (def-cursor-undo evil-end-of-line                       t       t)
-     (def-cursor-undo evil-beginning-of-visual-line          t       t)
-     (def-cursor-undo evil-end-of-visual-line                t       t)
-     (def-cursor-undo evil-line                              t       t)
-     (def-cursor-undo evil-line-or-visual-line               t       t)
-     (def-cursor-undo evil-end-of-line-or-visual-line        t       t)
-     (def-cursor-undo evil-middle-of-visual-line             t       t)
-     (def-cursor-undo evil-percentage-of-line                t       t)
-     (def-cursor-undo evil-first-non-blank                   t       t)
-     (def-cursor-undo evil-last-non-blank                    t       t)
-     (def-cursor-undo evil-first-non-blank-of-visual-line    t       t)
-     (def-cursor-undo evil-next-line-first-non-blank         t       t)
-     (def-cursor-undo evil-next-line-1-first-non-blank       t       t)
-     (def-cursor-undo evil-previous-line-first-non-blank     t       t)
-     (def-cursor-undo evil-goto-line                         t       t)
-     (def-cursor-undo evil-goto-first-line                   t       t)
-     (def-cursor-undo evil-forward-word-begin                nil     nil)
-     (def-cursor-undo evil-forward-word-end                  nil     nil)
-     (def-cursor-undo evil-backward-word-begin               nil     nil)
-     (def-cursor-undo evil-backward-word-end                 nil     nil)
-     (def-cursor-undo evil-forward-WORD-begin                nil     nil)
-     (def-cursor-undo evil-forward-WORD-end                  nil     nil)
-     (def-cursor-undo evil-backward-WORD-begin               nil     nil)
-     (def-cursor-undo evil-backward-WORD-end                 nil     nil)
-     (def-cursor-undo evil-forward-section-begin             nil     t)
-     (def-cursor-undo evil-forward-section-end               nil     t)
-     (def-cursor-undo evil-backward-section-begin            nil     t)
-     (def-cursor-undo evil-backward-section-end              nil     t)
-     (def-cursor-undo evil-forward-sentence-begin            nil     t)
-     (def-cursor-undo evil-backward-sentence-begin           nil     t)
-     (def-cursor-undo evil-forward-paragraph                 nil     t)
-     (def-cursor-undo evil-backward-paragraph                nil     t)
-     (def-cursor-undo evil-jump-item                         t       t)
-     (def-cursor-undo evil-next-flyspell-error               t       t)
-     (def-cursor-undo evil-prev-flyspell-error               t       t)
-     (def-cursor-undo evil-previous-open-paren               t       t)
-     (def-cursor-undo evil-next-close-paren                  t       t)
-     (def-cursor-undo evil-previous-open-brace               t       t)
-     (def-cursor-undo evil-next-close-brace                  t       t)
-     (def-cursor-undo evil-next-mark                         t       t)
-     (def-cursor-undo evil-next-mark-line                    t       t)
-     (def-cursor-undo evil-previous-mark                     t       t)
-     (def-cursor-undo evil-previous-mark-line                t       t)
-     (def-cursor-undo evil-find-char                         t       t)
-     (def-cursor-undo evil-find-char-backward                t       t)
-     (def-cursor-undo evil-find-char-to                      t       t)
-     (def-cursor-undo evil-find-char-to-backward             t       t)
-     (def-cursor-undo evil-repeat-find-char                  t       t)
-     (def-cursor-undo evil-repeat-find-char-reverse          t       t)
-     (def-cursor-undo evil-goto-column                       t       t)
-     (def-cursor-undo evil-jump-backward                     t       t)
-     (def-cursor-undo evil-jump-forward                      t       t)
-     (def-cursor-undo evil-jump-backward-swap                t       t)
-     (def-cursor-undo evil-jump-to-tag                       t       t)
-     (def-cursor-undo evil-lookup                            t       t)
-     (def-cursor-undo evil-ret                               t       t)
-     (def-cursor-undo evil-ret-and-indent                    t       t)
-     (def-cursor-undo evil-window-top                        nil     t)
-     (def-cursor-undo evil-window-middle                     nil     t)
-     (def-cursor-undo evil-window-bottom                     nil     t)
-     (def-cursor-undo evil-visual-restore                    t       t)
-     (def-cursor-undo evil-visual-exchange-corners           t       t)
-     (def-cursor-undo evil-search-forward                    t       t)
-     (def-cursor-undo evil-search-backward                   t       t)
-     (def-cursor-undo evil-search-next                       t       t)
-     (def-cursor-undo evil-search-previous                   t       t)
-     (def-cursor-undo evil-search-word-backward              t       t)
-     (def-cursor-undo evil-search-word-forward               t       t)
-     (def-cursor-undo evil-search-unbounded-word-backward    t       t)
-     (def-cursor-undo evil-search-unbounded-word-forward     t       t)
-     (def-cursor-undo evil-goto-definition                   t       t)
-     (def-cursor-undo evil-ex-search-next                    t       t)
-     (def-cursor-undo evil-ex-search-previous                t       t)
-     (def-cursor-undo evil-ex-search-forward                 t       t)
-     (def-cursor-undo evil-ex-search-backward                t       t)
-     (def-cursor-undo evil-ex-search-word-forward            t       t)
-     (def-cursor-undo evil-ex-search-word-backward           t       t)
-     (def-cursor-undo evil-ex-search-unbounded-word-forward  t       t)
-     (def-cursor-undo evil-ex-search-unbounded-word-backward t       t)))
+;; for feature 'evil-commands
+(def-cursor-undo evil-previous-line                     nil     nil    nil)
+(def-cursor-undo evil-next-line                         nil     nil    nil)
+(def-cursor-undo evil-previous-visual-line              nil     nil    nil)
+(def-cursor-undo evil-next-visual-line                  nil     nil    nil)
+(def-cursor-undo evil-forward-char                      nil     nil    nil)
+(def-cursor-undo evil-backward-char                     nil     nil    nil)
+(def-cursor-undo evil-beginning-of-line                 t       t)
+(def-cursor-undo evil-end-of-line                       t       t)
+(def-cursor-undo evil-beginning-of-visual-line          t       t)
+(def-cursor-undo evil-end-of-visual-line                t       t)
+(def-cursor-undo evil-line                              t       t)
+(def-cursor-undo evil-line-or-visual-line               t       t)
+(def-cursor-undo evil-end-of-line-or-visual-line        t       t)
+(def-cursor-undo evil-middle-of-visual-line             t       t)
+(def-cursor-undo evil-percentage-of-line                t       t)
+(def-cursor-undo evil-first-non-blank                   t       t)
+(def-cursor-undo evil-last-non-blank                    t       t)
+(def-cursor-undo evil-first-non-blank-of-visual-line    t       t)
+(def-cursor-undo evil-next-line-first-non-blank         t       t)
+(def-cursor-undo evil-next-line-1-first-non-blank       t       t)
+(def-cursor-undo evil-previous-line-first-non-blank     t       t)
+(def-cursor-undo evil-goto-line                         t       t)
+(def-cursor-undo evil-goto-first-line                   t       t)
+(def-cursor-undo evil-forward-word-begin                nil     nil)
+(def-cursor-undo evil-forward-word-end                  nil     nil)
+(def-cursor-undo evil-backward-word-begin               nil     nil)
+(def-cursor-undo evil-backward-word-end                 nil     nil)
+(def-cursor-undo evil-forward-WORD-begin                nil     nil)
+(def-cursor-undo evil-forward-WORD-end                  nil     nil)
+(def-cursor-undo evil-backward-WORD-begin               nil     nil)
+(def-cursor-undo evil-backward-WORD-end                 nil     nil)
+(def-cursor-undo evil-forward-section-begin             nil     t)
+(def-cursor-undo evil-forward-section-end               nil     t)
+(def-cursor-undo evil-backward-section-begin            nil     t)
+(def-cursor-undo evil-backward-section-end              nil     t)
+(def-cursor-undo evil-forward-sentence-begin            nil     t)
+(def-cursor-undo evil-backward-sentence-begin           nil     t)
+(def-cursor-undo evil-forward-paragraph                 nil     t)
+(def-cursor-undo evil-backward-paragraph                nil     t)
+(def-cursor-undo evil-jump-item                         t       t)
+(def-cursor-undo evil-next-flyspell-error               t       t)
+(def-cursor-undo evil-prev-flyspell-error               t       t)
+(def-cursor-undo evil-previous-open-paren               t       t)
+(def-cursor-undo evil-next-close-paren                  t       t)
+(def-cursor-undo evil-previous-open-brace               t       t)
+(def-cursor-undo evil-next-close-brace                  t       t)
+(def-cursor-undo evil-next-mark                         t       t)
+(def-cursor-undo evil-next-mark-line                    t       t)
+(def-cursor-undo evil-previous-mark                     t       t)
+(def-cursor-undo evil-previous-mark-line                t       t)
+(def-cursor-undo evil-find-char                         t       t)
+(def-cursor-undo evil-find-char-backward                t       t)
+(def-cursor-undo evil-find-char-to                      t       t)
+(def-cursor-undo evil-find-char-to-backward             t       t)
+(def-cursor-undo evil-repeat-find-char                  t       t)
+(def-cursor-undo evil-repeat-find-char-reverse          t       t)
+(def-cursor-undo evil-goto-column                       t       t)
+(def-cursor-undo evil-jump-backward                     t       t)
+(def-cursor-undo evil-jump-forward                      t       t)
+(def-cursor-undo evil-jump-backward-swap                t       t)
+(def-cursor-undo evil-jump-to-tag                       t       t)
+(def-cursor-undo evil-lookup                            t       t)
+(def-cursor-undo evil-ret                               t       t)
+(def-cursor-undo evil-ret-and-indent                    t       t)
+(def-cursor-undo evil-window-top                        nil     t)
+(def-cursor-undo evil-window-middle                     nil     t)
+(def-cursor-undo evil-window-bottom                     nil     t)
+(def-cursor-undo evil-visual-restore                    t       t)
+(def-cursor-undo evil-visual-exchange-corners           t       t)
+(def-cursor-undo evil-search-forward                    t       t)
+(def-cursor-undo evil-search-backward                   t       t)
+(def-cursor-undo evil-search-next                       t       t)
+(def-cursor-undo evil-search-previous                   t       t)
+(def-cursor-undo evil-search-word-backward              t       t)
+(def-cursor-undo evil-search-word-forward               t       t)
+(def-cursor-undo evil-search-unbounded-word-backward    t       t)
+(def-cursor-undo evil-search-unbounded-word-forward     t       t)
+(def-cursor-undo evil-goto-definition                   t       t)
+(def-cursor-undo evil-ex-search-next                    t       t)
+(def-cursor-undo evil-ex-search-previous                t       t)
+(def-cursor-undo evil-ex-search-forward                 t       t)
+(def-cursor-undo evil-ex-search-backward                t       t)
+(def-cursor-undo evil-ex-search-word-forward            t       t)
+(def-cursor-undo evil-ex-search-word-backward           t       t)
+(def-cursor-undo evil-ex-search-unbounded-word-forward  t       t)
+(def-cursor-undo evil-ex-search-unbounded-word-backward t       t)
 
-(eval-after-load 'viper-cmd
-  '(progn
-     (define-advice viper-undo (:around (orig-func &rest args) cundo-viper-undo)
-       (let ((bu1 (car buffer-undo-list))
-             (bu2 (cadr buffer-undo-list)))
-         (if (not (or (and (null bu1)
-                           (or (integerp bu2)
-                               (and (eq (car bu2) #'apply)
-                                    (eq (cadr bu2) #'cundo-restore-win))))
-                      (and (integerp bu1) (null bu2))
-                      (and (eq (car bu1) #'apply)
-                           (eq (cadr bu1) #'cundo-restore-win))))
-             (apply orig-func args)
-           ;; We're at a cursor-undo entry, use Emacs native undo
-           (setq this-command 'undo)
-           (undo))))
-     (def-cursor-undo viper-backward-Word)
-     (def-cursor-undo viper-end-of-Word)
-     (def-cursor-undo viper-find-char-backward)
-     (def-cursor-undo viper-goto-line                        t       t)
-     (def-cursor-undo viper-window-top                       t       t)
-     (def-cursor-undo viper-window-bottom                    t       t)
-     (def-cursor-undo viper-window-middle                    t       t)
-     (def-cursor-undo viper-search-Next                      t       t)
-     (def-cursor-undo viper-goto-char-backward)
-     (def-cursor-undo viper-forward-Word)
-     (def-cursor-undo viper-brac-function)
-     (def-cursor-undo viper-ket-function)
-     (def-cursor-undo viper-bol-and-skip-white)
-     (def-cursor-undo viper-goto-mark                        t       t)
-     (def-cursor-undo viper-backward-word)
-     (def-cursor-undo viper-end-of-word)
-     (def-cursor-undo viper-find-char-forward)
-     (def-cursor-undo viper-backward-char)
-     (def-cursor-undo viper-previous-line)
-     (def-cursor-undo viper-forward-char)
-     (def-cursor-undo viper-search-next                      t       t)
-     (def-cursor-undo viper-goto-char-forward)
-     (def-cursor-undo viper-forward-word)
-     (def-cursor-undo viper-line-to-top                      t       t       t)
-     (def-cursor-undo viper-line-to-middle                   t       t       t)
-     (def-cursor-undo viper-line-to-bottom                   t       t       t)
-     (def-cursor-undo viper-backward-paragraph               nil     t)
-     (def-cursor-undo viper-goto-col)
-     (def-cursor-undo viper-forward-paragraph                nil     t)
-     (def-cursor-undo viper-goto-eol)
-     (def-cursor-undo viper-paren-match                      t       t)
-     (def-cursor-undo viper-goto-mark-and-skip-white         t       t)
-     (def-cursor-undo viper-backward-sentence                t       t)
-     (def-cursor-undo viper-forward-sentence                 t       t)
-     (def-cursor-undo viper-next-line-at-bol)
-     (def-cursor-undo viper-repeat-find-opposite             t       t)
-     (def-cursor-undo viper-previous-line-at-bol)
-     (def-cursor-undo viper-search-forward                   t       t)
-     (def-cursor-undo viper-beginning-of-line)
-     (def-cursor-undo viper-repeat-find                      t       t)))
+;;
+;; Viper mode cursor movements support
+;;
+;; for feature 'viper-cmd
+(define-advice viper-undo (:around (orig-func &rest args) cundo-viper-undo)
+  (let ((bu1 (car buffer-undo-list))
+        (bu2 (cadr buffer-undo-list)))
+    (if (not (or (and (null bu1)
+                      (or (integerp bu2)
+                          (and (eq (car bu2) #'apply)
+                               (eq (cadr bu2) #'cundo-restore-win))))
+                 (and (integerp bu1) (null bu2))
+                 (and (eq (car bu1) #'apply)
+                      (eq (cadr bu1) #'cundo-restore-win))))
+        (apply orig-func args)
+      ;; We're at a cursor-undo entry, use Emacs native undo
+      (setq this-command 'undo)
+      (undo))))
+(def-cursor-undo viper-backward-Word)
+(def-cursor-undo viper-end-of-Word)
+(def-cursor-undo viper-find-char-backward)
+(def-cursor-undo viper-goto-line                        t       t)
+(def-cursor-undo viper-window-top                       t       t)
+(def-cursor-undo viper-window-bottom                    t       t)
+(def-cursor-undo viper-window-middle                    t       t)
+(def-cursor-undo viper-search-Next                      t       t)
+(def-cursor-undo viper-goto-char-backward)
+(def-cursor-undo viper-forward-Word)
+(def-cursor-undo viper-brac-function)
+(def-cursor-undo viper-ket-function)
+(def-cursor-undo viper-bol-and-skip-white)
+(def-cursor-undo viper-goto-mark                        t       t)
+(def-cursor-undo viper-backward-word)
+(def-cursor-undo viper-end-of-word)
+(def-cursor-undo viper-find-char-forward)
+(def-cursor-undo viper-backward-char)
+(def-cursor-undo viper-previous-line)
+(def-cursor-undo viper-forward-char)
+(def-cursor-undo viper-search-next                      t       t)
+(def-cursor-undo viper-goto-char-forward)
+(def-cursor-undo viper-forward-word)
+(def-cursor-undo viper-line-to-top                      t       t       t)
+(def-cursor-undo viper-line-to-middle                   t       t       t)
+(def-cursor-undo viper-line-to-bottom                   t       t       t)
+(def-cursor-undo viper-backward-paragraph               nil     t)
+(def-cursor-undo viper-goto-col)
+(def-cursor-undo viper-forward-paragraph                nil     t)
+(def-cursor-undo viper-goto-eol)
+(def-cursor-undo viper-paren-match                      t       t)
+(def-cursor-undo viper-goto-mark-and-skip-white         t       t)
+(def-cursor-undo viper-backward-sentence                t       t)
+(def-cursor-undo viper-forward-sentence                 t       t)
+(def-cursor-undo viper-next-line-at-bol)
+(def-cursor-undo viper-repeat-find-opposite             t       t)
+(def-cursor-undo viper-previous-line-at-bol)
+(def-cursor-undo viper-search-forward                   t       t)
+(def-cursor-undo viper-beginning-of-line)
+(def-cursor-undo viper-repeat-find                      t       t)
+
+;;; cursor-undo.el ends here
