@@ -93,7 +93,10 @@
 
 ;;; Code:
 
-(defvar cundo-enable-cursor-tracking t) ; global enable flag
+;; Global enabling control flag
+(defcustom cundo-enable-cursor-tracking  t
+  "Global control flag to enable cursor undo tracking."
+  :type 'boolean)
 ;; Local disable flag, use reverse logic as NIL is still a list and we can
 ;; pop it again and again
 (defvar cundo-disable-local-cursor-tracking nil)
@@ -219,8 +222,16 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;; temporarily cursor jump
 ;;
 (defmacro disable-cursor-tracking (func-sym)
-  (let ((advice-sym (make-symbol ;; gensym
-                     (concat (symbol-name func-sym) "-disable-cursor-tracking"))))
+  (let* ((func-sym-str (symbol-name func-sym))
+         (advice-sym-str (concat func-sym-str "-disable-cursor-tracking"))
+         (advice-sym (make-symbol advice-sym-str))
+         (def-advice-sym (intern-soft
+                          (concat func-sym-str "@" advice-sym-str))))
+    ;; prevent duplicate definition
+    (if def-advice-sym
+        (error (message (format
+"Error: Redefining cursor tracking disabling advice for `%S'"
+                         func-sym))))
     `(progn
        (define-advice ,func-sym (:around (orig-func &rest args) ,advice-sym)
          (let ((cundo-enable-cursor-tracking nil))
@@ -266,7 +277,6 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
           (apply orig-func args))
       (apply orig-func args))))
 
-
 (provide 'cursor-undo)
 
 ;;;
@@ -297,6 +307,8 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 (def-cursor-undo recenter                       nil     t       t)
 (def-cursor-undo recenter-top-bottom            nil     t       t)
 (def-cursor-undo mark-whole-buffer              t       t)
+(def-cursor-undo goto-line                      t       t)
+(def-cursor-undo move-to-window-line            t)
 
 (disable-cursor-tracking save-buffer)
 (disable-cursor-tracking write-file)
@@ -314,9 +326,7 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
      (def-cursor-undo cua-resize-rectangle-left      nil     nil      nil)
      (def-cursor-undo cua-resize-rectangle-right     nil     nil      nil)
      (def-cursor-undo cua-resize-rectangle-page-up   nil     nil      nil)
-     (def-cursor-undo cua-resize-rectangle-page-down nil     nil      nil)
-     (def-cursor-undo goto-line                      t       t)
-     (def-cursor-undo move-to-window-line            t)))
+     (def-cursor-undo cua-resize-rectangle-page-down nil     nil      nil)))
 
 ;;
 ;; Brief Editor Mode cursor movements
