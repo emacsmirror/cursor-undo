@@ -176,64 +176,63 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
         (error (message
                 (format "Error: Redefining cursor undo advice for `%S'"
                         func-sym))))
-    `(progn
-       (define-advice ,func-sym (:around (orig-func &rest args) ,advice-sym)
-         (let* ((cursor-tracking cundo-enable-cursor-tracking)
-                ;; prevent nested calls for complicated compound commands
-                (cundo-enable-cursor-tracking nil)
-                (prev-point (point))
-                (prev-screen-start))
-           ,@(when screen-pos
-               '((if cursor-tracking
+    `(define-advice ,func-sym (:around (orig-func &rest args) ,advice-sym)
+       (let* ((cursor-tracking cundo-enable-cursor-tracking)
+              ;; prevent nested calls for complicated compound commands
+              (cundo-enable-cursor-tracking nil)
+              (prev-point (point))
+              (prev-screen-start))
+         ,@(when screen-pos
+             '((if cursor-tracking
                    (setq prev-screen-start (window-start)))))
-           (apply orig-func args)
-           ;; This is a helper for commands that might take long. eg. page-up/
-           ;; page-down in big files, or line-up/down in big files when marking.
-           (unless
-               (or (not cursor-tracking)
-                   ;;[2017-11-15 Wed] Still need to test
-                   ;;  `(called-interactively-p 'any)', why?  Maybe it's because
-                   ;;  too many functions are invoked non-interactively and thus
-                   ;;  produce a lot of undo records in the undo
-                   ;;  buffer. Therefore after a search operation there are tons
-                   ;;  and tons of cursor undo information to redo.  Therefore,
-                   ;;  testing `(called-interactively-p 'any)' will be safer.
-                   ;;
-                   ;;[2017-11-13 Mon] We've already prevent reentering so there
-                   ;;  is really no need to test if this call is called
-                   ;;  interactively or not.  When a keyboard command calls
-                   ;;  another keyboard command using normal LISP function calls
-                   ;;  the (called-interactively-p 'any) will return nil unless
-                   ;;  they are called using `call-interactively'.  Now we
-                   ;;  remove it to allow either case.
-                   ;;
-                   ;; A sample function is this:
-                   ;;  (def-cursor-undo line-bookmark-jump-nearest   t  t)
-                   ;;  ;;(def-cursor-undo line-bookmark-nearest-next t  t)
-                   ;;  ;;(def-cursor-undo line-bookmark-nearest-prev t  t)
-                   ;;
-                   ;; `line-bookmark-nearest-next'/`line-bookmark-nearest-prev'
-                   ;; calls `line-bookmark-jump-nearest' (non-interactive call).
-                   ;; By adding cursor-undo to the inner function
-                   ;; `line-bookmark-jump-nearest' we don't need to add to both
-                   ;; `line-bookmark-nearest-next'/`line-bookmark-nearest-prev'.
-                   (not (called-interactively-p 'any))
-                   (car cundo-disable-local-cursor-tracking)
-                   ,@(unless no-combine '((eq last-command this-command)))
-                   ;; if NO-MOVE is specified, check if `point' moved
-                   ,@(unless no-move '((= prev-point (point))))
-                   ;; Sometimes the buffer-undo-list is t
-                   (and (listp buffer-undo-list)
-                        (numberp (cadr buffer-undo-list))
-                        (= prev-point (cadr buffer-undo-list))))
-             ,@(if screen-pos
-                   '((push `(apply cundo-restore-win (,@prev-screen-start))
-                           buffer-undo-list)))
-             ,@(unless no-move
-                '((push prev-point buffer-undo-list)))
-             ;;(abbrevmsg (format "c=%S,%S b=%S" last-command this-command
-             ;;                   buffer-undo-list) 128) ;; DBG
-             (undo-boundary)))))))
+         (apply orig-func args)
+         ;; This is a helper for commands that might take long. eg. page-up/
+         ;; page-down in big files, or line-up/down in big files when marking.
+         (unless
+             (or (not cursor-tracking)
+                 ;;[2017-11-15 Wed] Still need to test
+                 ;;  `(called-interactively-p 'any)', why?  Maybe it's because
+                 ;;  too many functions are invoked non-interactively and thus
+                 ;;  produce a lot of undo records in the undo
+                 ;;  buffer. Therefore after a search operation there are tons
+                 ;;  and tons of cursor undo information to redo.  Therefore,
+                 ;;  testing `(called-interactively-p 'any)' will be safer.
+                 ;;
+                 ;;[2017-11-13 Mon] We've already prevent reentering so there
+                 ;;  is really no need to test if this call is called
+                 ;;  interactively or not.  When a keyboard command calls
+                 ;;  another keyboard command using normal LISP function calls
+                 ;;  the (called-interactively-p 'any) will return nil unless
+                 ;;  they are called using `call-interactively'.  Now we
+                 ;;  remove it to allow either case.
+                 ;;
+                 ;; A sample function is this:
+                 ;;  (def-cursor-undo line-bookmark-jump-nearest   t  t)
+                 ;;  ;;(def-cursor-undo line-bookmark-nearest-next t  t)
+                 ;;  ;;(def-cursor-undo line-bookmark-nearest-prev t  t)
+                 ;;
+                 ;; `line-bookmark-nearest-next'/`line-bookmark-nearest-prev'
+                 ;; calls `line-bookmark-jump-nearest' (non-interactive call).
+                 ;; By adding cursor-undo to the inner function
+                 ;; `line-bookmark-jump-nearest' we don't need to add to both
+                 ;; `line-bookmark-nearest-next'/`line-bookmark-nearest-prev'.
+                 (not (called-interactively-p 'any))
+                 (car cundo-disable-local-cursor-tracking)
+                 ,@(unless no-combine '((eq last-command this-command)))
+                 ;; if NO-MOVE is specified, check if `point' moved
+                 ,@(unless no-move '((= prev-point (point))))
+                 ;; Sometimes the buffer-undo-list is t
+                 (and (listp buffer-undo-list)
+                      (numberp (cadr buffer-undo-list))
+                      (= prev-point (cadr buffer-undo-list))))
+           ,@(if screen-pos
+                 '((push `(apply cundo-restore-win ,prev-screen-start)
+                         buffer-undo-list)))
+           ,@(unless no-move
+               '((push prev-point buffer-undo-list)))
+           ;;(abbrevmsg (format "c=%S,%S b=%S" last-command this-command
+           ;;                   buffer-undo-list) 128) ;; DBG
+           (undo-boundary))))))
 
 ;;
 ;; Disable cursor tracking during miscellaneous operations that could cause
@@ -250,10 +249,9 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
         (error (message (format
 "Error: Redefining cursor tracking disabling advice for `%S'"
                          func-sym))))
-    `(progn
-       (define-advice ,func-sym (:around (orig-func &rest args) ,advice-sym)
-         (let ((cundo-enable-cursor-tracking nil))
-           (apply orig-func args))))))
+    `(define-advice ,func-sym (:around (orig-func &rest args) ,advice-sym)
+       (let ((cundo-enable-cursor-tracking nil))
+         (apply orig-func args)))))
 
 ;;
 ;; Allow cursor undo in a read-only buffer
