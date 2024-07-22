@@ -6,7 +6,6 @@
 ;; Maintainer:   Luke Lee <luke.yx.lee@gmail.com>
 ;; Keywords:     undo, cursor
 ;; Version:      1.0
-;; Package-Requires: ((cl-lib "0.5"))
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -92,17 +91,23 @@
 
 ;;; Code:
 
-;;;###autoload
-(define-minor-mode cursor-undo
-  "Global minor mode for tracking cursor undo."
-  :lighter " cu"
-  :variable cundo-enable-cursor-tracking)
+(defgroup cursor-undo nil
+  "Cursor movement undo support."
+  :prefix "cundo-"
+  :group 'cursor-undo)
 
 ;; Global enabling control flag
 ;;;###autoload
 (defcustom cundo-enable-cursor-tracking  nil
   "Global control flag to enable cursor undo tracking."
+  :require 'cursor-undo
   :type 'boolean)
+
+;;;###autoload
+(define-minor-mode cursor-undo
+  "Global minor mode for tracking cursor undo."
+  :lighter " cu"
+  :variable cundo-enable-cursor-tracking)
 
 ;; Local disable flag, use reverse logic as NIL is still a list and we can
 ;; pop it again and again
@@ -124,6 +129,11 @@
                   (null (caddr buffer-undo-list)))
         ;; (nil (apply cdr nil) nil a b...) -> (nil a b...)
         (setq buffer-undo-list (cddr buffer-undo-list)))))
+
+;; Note that this `prev-screen-start' is NOT a dynamic binding variable.
+;; It's defined here to make byte compiler not to complain about:
+;; "Warning: Unused lexical variable ‘prev-screen-start’".
+(defvar prev-screen-start)
 
 ;;;###autoload
 (defmacro def-cursor-undo (func-sym &optional no-combine screen-pos no-move)
@@ -174,7 +184,7 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
                 (prev-point (point))
                 (prev-screen-start))
            ,@(when screen-pos
-               '((when cursor-tracking
+               '((if cursor-tracking
                    (setq prev-screen-start (window-start)))))
            (apply orig-func args)
            ;; This is a helper for commands that might take long. eg. page-up/
@@ -217,8 +227,8 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
                         (numberp (cadr buffer-undo-list))
                         (= prev-point (cadr buffer-undo-list))))
              ,@(if screen-pos
-                  '((push `(apply cundo-restore-win (,@prev-screen-start))
-                          buffer-undo-list)))
+                   '((push `(apply cundo-restore-win (,@prev-screen-start))
+                           buffer-undo-list)))
              ,@(unless no-move
                 '((push prev-point buffer-undo-list)))
              ;;(abbrevmsg (format "c=%S,%S b=%S" last-command this-command
@@ -401,27 +411,26 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
     (setf this-command lastcmd)))
 
 ;; Bookmark related
-(eval-after-load 'bookmark+-1 ;; emacswiki bookmark extension
-  '(progn
-     (def-cursor-undo bookmark-jump                  t      t) ;; C-x b g
-     (def-cursor-undo bookmark-jump-other-window     t      t) ;; C-x b j
-     (disable-cursor-tracking bookmark-save)))
+;; For feature 'bookmark+-1 (emacswiki bookmark extension)
+(def-cursor-undo bookmark-jump                  t      t) ;; C-x b g
+(def-cursor-undo bookmark-jump-other-window     t      t) ;; C-x b j
+(disable-cursor-tracking bookmark-save)
 
 ;;
 ;; Prevent cursor tracking during semantic parsing
 ;;
-(eval-after-load
+(eval-after-load 'semantic
   '(progn
      (add-hook 'semantic-before-idle-scheduler-reparse-hooks
                #'(lambda ()
                    (push 't cundo-disable-local-cursor-tracking)))
      (add-hook 'semantic-after-idle-scheduler-reparse-hooks
                #'(lambda ()
-                   (pop cundo-disable-local-cursor-tracking)))
-     (disable-cursor-tracking semantic-fetch-tags)
-     (disable-cursor-tracking senator-parse)
-     (disable-cursor-tracking senator-force-refresh)
-     (disable-cursor-tracking semantic-go-to-tag)))
+                   (pop cundo-disable-local-cursor-tracking)))))
+(disable-cursor-tracking semantic-fetch-tags)
+(disable-cursor-tracking senator-parse)
+(disable-cursor-tracking senator-force-refresh)
+(disable-cursor-tracking semantic-go-to-tag)
 
 ;; For feature 'smie
 ;; Need to disable the following, a sample test without disabling this is
@@ -435,21 +444,21 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;;
 ;; Disable cursor tracking during ediff comparing [2013-06-28 15:16:06 +0800]
 ;;
+(defvar undo-cursor-ediff-buffer-list nil)
+(defun undo-cursor-ediff-prepare-buffer-hook ()
+  (push (current-buffer) undo-cursor-ediff-buffer-list)
+  (push 't cundo-disable-local-cursor-tracking)
+  (message "Disable buffer %S cursor tracking" (current-buffer)))
+
+(defun undo-cursor-ediff-cleanup-hook ()
+  (dolist (ediff-buf undo-cursor-ediff-buffer-list)
+    (with-current-buffer ediff-buf
+      (pop cundo-disable-local-cursor-tracking)
+      (message "Enable buffer %S cursor tracking" ediff-buf)))
+  (setf undo-cursor-ediff-buffer-list nil))
+
 (eval-after-load 'ediff
   '(progn
-     (defvar undo-cursor-ediff-buffer-list nil)
-     (defun undo-cursor-ediff-prepare-buffer-hook ()
-       (push (current-buffer) undo-cursor-ediff-buffer-list)
-       (push 't cundo-disable-local-cursor-tracking)
-       (message "Disable buffer %S cursor tracking" (current-buffer)))
-
-     (defun undo-cursor-ediff-cleanup-hook ()
-       (dolist (ediff-buf undo-cursor-ediff-buffer-list)
-         (with-current-buffer ediff-buf
-           (pop cundo-disable-local-cursor-tracking)
-           (message "Enable buffer %S cursor tracking" ediff-buf)))
-       (setf undo-cursor-ediff-buffer-list nil))
-
      (add-hook 'ediff-prepare-buffer-hook
                #'undo-cursor-ediff-prepare-buffer-hook)
      ;; Set-up two cleanup hooks in case of any error
