@@ -5,7 +5,7 @@
 ;; Author:       Luke Lee <luke.yx.lee@gmail.com>
 ;; Maintainer:   Luke Lee <luke.yx.lee@gmail.com>
 ;; Keywords:     undo, cursor
-;; Version:      1.1
+;; Version:      1.1.1
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -302,22 +302,42 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;; -----------------------------------------------------------------------
 ;;               keyboard function       no-combine  screen-pos  no-move
 ;; -----------------------------------------------------------------------
-;; General cursor movements
+;; Emacs general cursor movements
 (def-cursor-undo previous-line                  nil     nil      nil)
 (def-cursor-undo next-line                      nil     nil      nil)
 (def-cursor-undo left-char                      nil     nil      nil)
 (def-cursor-undo right-char                     nil     nil      nil)
+(def-cursor-undo scroll-up-command              nil     t)
+(def-cursor-undo scroll-down-command            nil     t)
+(def-cursor-undo scroll-left                    t       t)
+(def-cursor-undo scroll-right                   t       t)
+(def-cursor-undo beginning-of-buffer            t       t)
+(def-cursor-undo end-of-buffer                  t       t)
+(def-cursor-undo backward-word                  nil     nil)
+(def-cursor-undo forward-word                   nil     nil)
+(def-cursor-undo move-beginning-of-line)
+(def-cursor-undo move-end-of-line)
+(def-cursor-undo forward-sentence)
+(def-cursor-undo backward-sentence)
+(def-cursor-undo forward-paragraph              nil     t)
+(def-cursor-undo backward-paragraph             nil     t)
 
 ;; Mouse movement, scrolling
 (def-cursor-undo mouse-set-point                t)
 (def-cursor-undo scroll-bar-toolkit-scroll      nil)
 (def-cursor-undo mwheel-scroll                  nil)
 
-;; Enabling `forward-secp' will cause semantic parsing to push a lot of cursor
+;; Enabling `forward-sexp' will cause semantic parsing to push a lot of cursor
 ;; undo entries into the buffer undo list.
 (def-cursor-undo forward-sexp                   t)
 (def-cursor-undo backward-sexp                  t)
 (def-cursor-undo mouse-drag-region              t)
+
+;; Search
+(def-cursor-undo isearch-forward                nil     t)
+(def-cursor-undo isearch-backward               nil     t)
+(def-cursor-undo isearch-forward-regexp         nil     t)
+(def-cursor-undo isearch-backward-regexp        nil     t)
 
 ;; Others
 (def-cursor-undo recenter                       nil     t       t)
@@ -325,6 +345,7 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 (def-cursor-undo mark-whole-buffer              t       t)
 (def-cursor-undo goto-line                      t       t)
 (def-cursor-undo move-to-window-line            t)
+(def-cursor-undo jump-to-register               t       t)
 
 (disable-cursor-tracking save-buffer)
 (disable-cursor-tracking write-file)
@@ -509,8 +530,8 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 (def-cursor-undo evil-forward-section-end               nil     t)
 (def-cursor-undo evil-backward-section-begin            nil     t)
 (def-cursor-undo evil-backward-section-end              nil     t)
-(def-cursor-undo evil-forward-sentence-begin            nil     t)
-(def-cursor-undo evil-backward-sentence-begin           nil     t)
+(def-cursor-undo evil-forward-sentence-begin            nil     nil)
+(def-cursor-undo evil-backward-sentence-begin           nil     nil)
 (def-cursor-undo evil-forward-paragraph                 nil     t)
 (def-cursor-undo evil-backward-paragraph                nil     t)
 (def-cursor-undo evil-jump-item                         t       t)
