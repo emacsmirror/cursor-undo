@@ -5,7 +5,7 @@
 ;; Author:       Luke Lee <luke.yx.lee@gmail.com>
 ;; Maintainer:   Luke Lee <luke.yx.lee@gmail.com>
 ;; Keywords:     undo, cursor
-;; Version:      1.1.1
+;; Version:      1.1.2
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -181,11 +181,12 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
               ;; prevent nested calls for complicated compound commands
               (cundo-enable-cursor-tracking nil)
               (prev-point (point))
-              (prev-screen-start))
+              (prev-screen-start)
+              (result))
          ,@(when screen-pos
              '((if cursor-tracking
                    (setq prev-screen-start (window-start)))))
-         (apply orig-func args)
+         (setq result (apply orig-func args))
          ;; This is a helper for commands that might take long. eg. page-up/
          ;; page-down in big files, or line-up/down in big files when marking.
          (unless
@@ -232,7 +233,8 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
                '((push prev-point buffer-undo-list)))
            ;;(abbrevmsg (format "c=%S,%S b=%S" last-command this-command
            ;;                   buffer-undo-list) 128) ;; DBG
-           (undo-boundary))))))
+           (undo-boundary))
+         result))))
 
 ;;
 ;; Disable cursor tracking during miscellaneous operations that could cause
@@ -268,7 +270,7 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;;   you don't even notice and keep undoing other cursor commands you
 ;;   don't want to undo at all.  In this case, you can switch the buffer
 ;;   to read-only mode (by setting `buffer-read-only' to 't), then long
-;;   press <undo> utill the undo command warns that you that you're
+;;   press <undo> untill the undo command warns that you that you're
 ;;   trying to edit a read-only buffer.  At this point you're exactly at
 ;;   the latest editing position where you are looking for.  Now you can
 ;;   then safely set `buffer-read-only' back to NIL and continue your
@@ -292,8 +294,6 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
             (user-error "Buffer is read-only: cannot undo an editing command!")
           (apply orig-func args))
       (apply orig-func args))))
-
-(provide 'cursor-undo)
 
 ;;;
 ;;; Advice cursor movement commands
@@ -640,5 +640,7 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 (def-cursor-undo viper-search-forward                   t       t)
 (def-cursor-undo viper-beginning-of-line)
 (def-cursor-undo viper-repeat-find                      t       t)
+
+(provide 'cursor-undo)
 
 ;;; cursor-undo.el ends here
