@@ -5,7 +5,7 @@
 ;; Author:       Luke Lee <luke.yx.lee@gmail.com>
 ;; Maintainer:   Luke Lee <luke.yx.lee@gmail.com>
 ;; Keywords:     undo, cursor
-;; Version:      1.1.2
+;; Version:      1.1.3
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -135,6 +135,17 @@
 ;; "Warning: Unused lexical variable ‘prev-screen-start’".
 (defvar prev-screen-start)
 
+(defun cundo-track-screen-start (prv-screen-start)
+  (let ((entry (list 'apply 'cundo-restore-win prv-screen-start)))
+    (if (eq buffer-undo-list 't)
+        (setq buffer-undo-list entry)
+      (push entry buffer-undo-list))))
+
+(defun cundo-track-prev-point (prev-point)
+  (if (eq buffer-undo-list 't)
+      (setq buffer-undo-list (list prev-point))
+    (push prev-point buffer-undo-list)))
+
 ;;;###autoload
 (defmacro def-cursor-undo (func-sym &optional no-combine screen-pos no-move)
   "Define an advice for FUNC-SYM to track cursor movements in the undo buffer.
@@ -227,10 +238,9 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
                       (numberp (cadr buffer-undo-list))
                       (= prev-point (cadr buffer-undo-list))))
            ,@(if screen-pos
-                 '((push `(apply cundo-restore-win ,prev-screen-start)
-                         buffer-undo-list)))
+                 '((cundo-track-screen-start prev-screen-start)))
            ,@(unless no-move
-               '((push prev-point buffer-undo-list)))
+               '((cundo-track-prev-point prev-point)))
            ;;(abbrevmsg (format "c=%S,%S b=%S" last-command this-command
            ;;                   buffer-undo-list) 128) ;; DBG
            (undo-boundary))
