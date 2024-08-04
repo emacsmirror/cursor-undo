@@ -5,7 +5,7 @@
 ;; Author:       Luke Lee <luke.yx.lee@gmail.com>
 ;; Maintainer:   Luke Lee <luke.yx.lee@gmail.com>
 ;; Keywords:     undo, cursor
-;; Version:      1.1.3
+;; Version:      1.1.4
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -183,10 +183,11 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
          (def-advice-sym (intern-soft
                           (concat func-sym-str "@" advice-sym-str))))
     ;; prevent duplicate definition
-    (if def-advice-sym
-        (error (message
-                (format "Error: Redefining cursor undo advice for `%S'"
-                        func-sym))))
+    (when def-advice-sym
+      (unless (member #'package-menu--post-refresh post-command-hook)
+        ;; do not warn when upgrading this package
+        (warn "Redefining cursor undo advice for `%S'" func-sym))
+      (advice-remove func-sym def-advice-sym))
     `(define-advice ,func-sym (:around (orig-func &rest args) ,advice-sym)
        (let* ((cursor-tracking cundo-enable-cursor-tracking)
               ;; prevent nested calls for complicated compound commands
@@ -257,10 +258,11 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
          (def-advice-sym (intern-soft
                           (concat func-sym-str "@" advice-sym-str))))
     ;; prevent duplicate definition
-    (if def-advice-sym
-        (error (message (format
-"Error: Redefining cursor tracking disabling advice for `%S'"
-                         func-sym))))
+    (when def-advice-sym
+      (unless (member #'package-menu--post-refresh post-command-hook)
+        ;; do not warn when upgrading this package
+        (warn "Redefining cursor tracking disabling advice for `%S'" func-sym))
+      (advice-remove func-sym def-advice-sym))
     `(define-advice ,func-sym (:around (orig-func &rest args) ,advice-sym)
        (let ((cundo-enable-cursor-tracking nil))
          (apply orig-func args)))))
