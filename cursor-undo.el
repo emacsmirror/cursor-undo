@@ -5,7 +5,7 @@
 ;; Author:       Luke Lee <luke.yx.lee@gmail.com>
 ;; Maintainer:   Luke Lee <luke.yx.lee@gmail.com>
 ;; Keywords:     undo, cursor
-;; Version:      1.1.4
+;; Version:      1.1.5
 
 ;; GNU Emacs is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -138,7 +138,7 @@
 (defun cundo-track-screen-start (prv-screen-start)
   (let ((entry (list 'apply 'cundo-restore-win prv-screen-start)))
     (if (eq buffer-undo-list 't)
-        (setq buffer-undo-list entry)
+        (setq buffer-undo-list (list entry))
       (push entry buffer-undo-list))))
 
 (defun cundo-track-prev-point (prev-point)
@@ -288,23 +288,45 @@ relative screen position (screen-pos=NIL) nor `point' position (no-move=t)."))
 ;;   then safely set `buffer-read-only' back to NIL and continue your
 ;;   editing.
 ;;
+
+(defun cundo-is-cursor-undo-entry (undolist)
+  (if (listp undolist)
+      (let ((uitem (if (null (car undolist))
+                       (cadr undolist)
+                     (car undolist))))
+        (or (numberp uitem) ;; point marker
+            ;; Cursor-undo created undo entry
+            (and (eq #'apply (nth 0 uitem))
+                 (eq #'cundo-restore-win (nth 1 uitem)))))
+    (eq undolist 't)))
+
+(defun cundo-is-undo-boundary ()
+  (let ((undolist (if (eq last-command 'undo)
+                      pending-undo-list
+                    buffer-undo-list)))
+    (if (listp undolist)
+        (equal '(apply cdr nil) ;; undo boundary
+               (if (null (car undolist))
+                   (cadr undolist)
+                 (car undolist)))
+      (eq undolist 't))))
+
 (define-advice undo (:around (orig-func &rest args)
                              undo-cursor-in-read-only-buffer)
   (interactive "P") ;; Change the behavior from "*P" to "P"
   (if (if (eq last-command 'undo)
           ;; last-command is undo, check pending undo list if the first command
-          ;; is cursor movement or not
-          (and (listp pending-undo-list)
-               (numberp (car pending-undo-list)))
+          ;; is a cursor movement or not
+          (cundo-is-cursor-undo-entry pending-undo-list)
         ;; not a continuous undo, check first command is cursor movement or not
-        (and (listp buffer-undo-list)
-             (null (car buffer-undo-list))
-             (numberp (cadr buffer-undo-list))))
-      (apply orig-func args)
-    (if buffer-read-only
-        (if (listp pending-undo-list)
-            (user-error "Buffer is read-only: cannot undo an editing command!")
-          (apply orig-func args))
+        (cundo-is-cursor-undo-entry buffer-undo-list))
+      ;; if it's a cursor undo, go `undo' regardless of read-only settings
+      (let ((buffer-read-only nil)) ;; temp dynamically binding
+        (apply orig-func args))
+    ;; Not cursor undo
+    (if (and buffer-read-only
+             (not (cundo-is-undo-boundary)))
+        (user-error "Buffer is read-only: cannot undo an editing command")
       (apply orig-func args))))
 
 ;;;
